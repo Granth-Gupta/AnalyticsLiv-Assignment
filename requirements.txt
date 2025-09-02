@@ -1,0 +1,6 @@
+langchain>=0.3.2
+langchain-community>=0.3.2
+langchain-core>=0.3.7
+langchain-google-genai>=2.1.1
+dotenv-loader>=1.0.4
+chromadb>=1.0.20
