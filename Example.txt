@@ -1,0 +1,39 @@
+Example 1
+
+Enter user query:
+Find year in which total sales is equal to 1805.
+-----------------------------------
+
+User Query:  Find year in which total sales is equal to 1805.
+Result:  The year in which total sales is equal to 1805 is 2024.
+
+------------------------------------------------------------------------------------------------------------
+Example 2
+
+Provide all months that are included in sales data of 2024.
+-----------------------------------
+
+User Query:  Provide all months that are included in sales data of 2024.
+Result:  The months included in the sales data for 2024 are:
+*   January
+*   February
+*   March
+*   April
+*   May
+*   June
+*   July
+*   August
+*   September
+*   October
+*   November
+*   December
+
+------------------------------------------------------------------------------------------------------------
+Example 3
+
+Enter user query:
+ Show me the average sales along with refund policy.
+-----------------------------------
+
+User Query:   Show me the average sales along with refund policy.
+Result:  The average sales are 1964.58. Refunds are allowed within 30 days of purchase.
