@@ -1,33 +1,40 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from dotenv import load_dotenv
-from typing import List, Tuple
 
-load_dotenv()
+def _qa_to_context(qa_chain):
+    def _run(q: str) -> str:
+        try:
+            ans = qa_chain.invoke({"query": q})
+        except Exception:
+            ans = qa_chain.invoke(q)
+        return ans["result"] if isinstance(ans, dict) and "result" in ans else str(ans)
+    return _run
 
-def llm_chain(retrievers: List, prompt: str):
+def llm_chain_faiss(artifacts: dict, prompt: str):
+    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
 
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0.)
+    retrievalQA_sales = artifacts["retrievalQA_sales"]
+    retrievalQA_faq = artifacts["retrievalQA_faq"]
 
-    sales_retriever, faq_retriever, vectorstore_csv, _ = retrievers[0]
-    all_sales_retriever = retrievers[1]
+    # Wrap QA chains as Runnables that map input question -> context strings
+    sales_context = _qa_to_context(retrievalQA_sales)
+    faq_context = _qa_to_context(retrievalQA_faq)
 
-    prompt = ChatPromptTemplate.from_template(prompt)
+    all_sales_retriever = artifacts.get("all_sales_retriever", sales_context)
+
+    chat_prompt = ChatPromptTemplate.from_template(prompt)
 
     chain = (
-            {
-                "sales_csv_context": sales_retriever,
-                "all_sales_context": all_sales_retriever,
-                "FAQ_context": faq_retriever,
-                "question": RunnablePassthrough()
-            }
-            | prompt
-            | model
-            | StrOutputParser()
+        {
+            "sales_csv_context": sales_context,   # calls RetrievalQA with the question, returns context-like text
+            "all_sales_context": all_sales_retriever,
+            "FAQ_context": faq_context,
+            "question": RunnablePassthrough(),
+        }
+        | chat_prompt
+        | model
+        | StrOutputParser()
     )
-
     return chain
