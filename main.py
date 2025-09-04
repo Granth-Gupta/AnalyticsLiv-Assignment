@@ -1,19 +1,20 @@
-import os
 import time
 import logging
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Form, status
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
 from Supabase.client import supabase_client
-# from graph.graph import llm_chain
-from graph.graph import llm_chain_faiss
-from graph.retrievals.supabase_retriever import data_retriever, all_csv_docs_retriever
+from graph.chains.routed_retrievalQA import retrieval_qa_chain
+from graph.retrievals.supabase_retriever import data_retriever
+from graph.retrievals.all_csv_retriever import AllCSVRetriever
+from graph.retrievals.routed_retriever import RoutedDocsRetriever
 from graph.Prompts.prompt import PROMPT
+from graph.Prompts.router_prompt import ROUTER_PROMPT
 from graph.retrievals.supabase_retriever import table_is_empty
 
 logging.basicConfig(
@@ -72,37 +73,18 @@ class AskIn(BaseModel):
 def collection_ready() -> bool:
     return bool(app.state.csv_path and app.state.txt_path)
 
-# def build_chain():
-#     if not collection_ready():
-#         if (table_is_empty(supabase_client, "sales_collection")
-#             or table_is_empty(supabase_client, "faq_collection")):
-#                 raise HTTPException(status_code=409, detail="Collection empty. Upload a CSV and a TXT via /upload first.")
-#         else:
-#             retrievers = [
-#                 data_retriever(supabase_client, None, None),
-#                 all_csv_docs_retriever(supabase_client),
-#             ]
-#     else:
-#         retrievers = [
-#             data_retriever(supabase_client, app.state.csv_path, app.state.txt_path),
-#             all_csv_docs_retriever(supabase_client),
-#         ]
-#     return llm_chain(retrievers, PROMPT)
-
 def build_chain():
-    # If no fresh uploads in this process, ensure Supabase already has data
     if not collection_ready():
         if table_is_empty(supabase_client, "sales_collection") or table_is_empty(supabase_client, "faq_collection"):
             raise HTTPException(status_code=409, detail="Collection empty. Upload a CSV and a TXT via /upload first.")
-        # Build artifacts without reseeding (pass None paths)
         artifacts = data_retriever(supabase_client, None, None)  # returns dict with 'supabase' and 'faiss'
+        artifacts["all_sales_retriever"] = AllCSVRetriever(supabase_client)
     else:
-        # Seed or reseed from uploaded files
         artifacts = data_retriever(supabase_client, app.state.csv_path, app.state.txt_path)
-        artifacts["all_sales_retriever"] = all_csv_docs_retriever(supabase_client)
+        artifacts["all_sales_retriever"] = AllCSVRetriever(supabase_client)
 
-    # Create the Runnable chain that uses FAISS RetrievalQA wrappers internally
-    return llm_chain_faiss(artifacts, PROMPT)
+    retrieval_routed = RoutedDocsRetriever(artifacts, ROUTER_PROMPT)
+    return retrieval_qa_chain(PROMPT, retrieval_routed)
 
 
 ALLOWED_EXTS = {".csv", ".txt"}

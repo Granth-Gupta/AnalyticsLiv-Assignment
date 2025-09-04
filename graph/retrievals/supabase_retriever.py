@@ -1,17 +1,15 @@
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import CSVLoader, TextLoader
-from langchain_community.vectorstores import FAISS, SupabaseVectorStore
-from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_core.documents import Document
-from langchain_core.runnables import RunnableLambda
-from pathlib import Path
-from typing import Optional, List
-from dotenv import load_dotenv
-from supabase import Client
+from langchain_community.document_loaders import (
+    CSVLoader,
+    TextLoader
+)
+from langchain_community.vectorstores import SupabaseVectorStore
 
-load_dotenv()
+from pathlib import Path
+from typing import Optional
+from supabase import Client
 
 SALES_TABLE = "sales_collection"
 FAQ_TABLE = "faq_collection"
@@ -94,37 +92,18 @@ def data_retriever(supabase_client: Client, CSV_PATH: Optional[str], TXT_PATH: O
         query_name=QUERY_FN_FAQ,
     )
 
-    csv_retriever_sb = vectorstore_csv.as_retriever(search_kwargs={"k": 8})
-    faq_retriever_sb = vectorstore_faq.as_retriever(search_kwargs={"k": 8})
+    csv_retriever = vectorstore_csv.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}
+    )
+    faq_retriever = vectorstore_faq.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}
+    )
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-    retrievalQA_sales = RetrievalQA.from_llm(llm=llm, retriever=csv_retriever_sb)  # [1][2]
-    retrievalQA_faq = RetrievalQA.from_llm(llm=llm, retriever=faq_retriever_sb)
-
+    # return both retrievers in dict type
     return {
-        "retrievalQA_sales": retrievalQA_sales,
-        "retrievalQA_faq": retrievalQA_faq,
+        "retrieval_sales": csv_retriever,
+        "retrieval_faq": faq_retriever,
     }
 
-def all_csv_docs_retriever(supabase_client: Client) -> RunnableLambda:
-    page_size = 100
-    docs_all: List[Document] = []
-    start = 0
-    while True:
-        end = start + page_size - 1
-        resp = supabase_client.table(SALES_TABLE).select("content, metadata").range(start, end).execute()
-        rows = getattr(resp, "data", None) or []
-        if not rows:
-            break
-        for r in rows:
-            docs_all.append(
-                Document(
-                    page_content=r.get("content", "") or "",
-                    metadata=r.get("metadata") or {}
-                )
-            )
-        if len(rows) < page_size:
-            break
-        start += page_size
-
-    return RunnableLambda(lambda _: docs_all)
